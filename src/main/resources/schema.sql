@@ -35,12 +35,13 @@ create table if not exists match
     id bigint auto_increment primary key,
     challenger_id bigint not null references character(id) on delete cascade,
     opponent_id bigint not null references character(id) on delete cascade,
-    match_outcome text not null,
-    challenger_xp int not null,
-    opponent_xp int not null
+    challenger_exp_gained int default 0,
+    opponent_exp_gained int default 0,
+    challenger_is_victor boolean default false,
+    opponent_is_victor boolean default false
 );
 
-create table if not exists round
+create table if not exists match_round
 (
     id bigint auto_increment primary key,
     match_id bigint not null references match(id) on delete cascade,
@@ -49,4 +50,14 @@ create table if not exists round
     health_delta int not null,
     stamina_delta int not null,
     mana_delta int not null
+);
+
+create table if not exists flight
+(
+    id bigint auto_increment primary key,
+    round_id bigint not null references match_round(id) on delete cascade,
+    flight_type varchar(50) not null,
+    distance int not null,
+    duration int not null,
+    success boolean not null
 );
