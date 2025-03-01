@@ -3,6 +3,7 @@ package com.motycka.edu.game.characters
 import com.motycka.edu.game.characters.model.CharacterClass
 import com.motycka.edu.game.characters.rest.CharacterRegistrationRequest
 import com.motycka.edu.game.characters.rest.CharacterResponse
+import com.motycka.edu.game.characters.rest.CharacterUpdateRequest
 import com.motycka.edu.game.characters.rest.toCharacter
 import com.motycka.edu.game.characters.rest.toCharacterResponse
 import org.springframework.http.HttpStatus
@@ -33,13 +34,11 @@ class CharacterController(
     fun getChallengers(
         @RequestParam("class", required = false) characterClass: String?,
         @RequestParam("name", required = false) name: String?
-    ): List<CharacterResponse>? {
-        return name?.let { it ->
-            characterService.getChallenger(
-                characterClass = parseCharacterClass(characterClass)?.name,
-                it
-            ).map { it.toCharacterResponse()!! }
-        }
+    ): List<CharacterResponse> {
+        return characterService.getChallenger(
+            characterClass = parseCharacterClass(characterClass)?.name,
+            name = name ?: ""
+        ).map { it.toCharacterResponse()!! }
     }
 
     @GetMapping("/opponents")
@@ -61,6 +60,15 @@ class CharacterController(
     ): ResponseEntity<CharacterResponse> {
         val createdCharacter = characterService.createCharacter(characterRequest.toCharacter())
         return ResponseEntity.status(HttpStatus.CREATED).body(createdCharacter.toCharacterResponse()!!)
+    }
+
+    @PutMapping("/{id}")
+    fun updateCharacter(
+        @PathVariable id: Long,
+        @RequestBody updateRequest: CharacterUpdateRequest
+    ): ResponseEntity<CharacterResponse> {
+        val updatedCharacter = characterService.updateCharacter(id, updateRequest.toCharacter())
+        return ResponseEntity.ok(updatedCharacter.toCharacterResponse()!!)
     }
 
     /**

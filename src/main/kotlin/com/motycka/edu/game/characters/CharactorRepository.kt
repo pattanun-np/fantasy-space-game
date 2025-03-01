@@ -62,6 +62,36 @@ class CharacterRepository(
         ).firstOrNull()
     }
 
+    fun updateCharacter(character: Character): Character? {
+        logger.debug { "Updating character with ID: ${character.id}" }
+        return jdbcTemplate.query(
+            """
+            SELECT * FROM FINAL TABLE (
+                UPDATE character 
+                SET name = ?, 
+                    health = ?, 
+                    attack = ?, 
+                    stamina = ?, 
+                    defense = ?, 
+                    mana = ?, 
+                    healing = ?,
+                    level = ?
+                WHERE id = ?
+            )
+            """.trimIndent(),
+            ::rowMapper,
+            character.name,
+            character.health,
+            character.attack,
+            character.stamina,
+            character.defense,
+            character.mana,
+            character.healing,
+            character.level,
+            character.id
+        ).firstOrNull()
+    }
+
     private fun executeQuery(
         characterClass: String?,
         name: String?,

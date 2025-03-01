@@ -6,10 +6,15 @@ plugins {
     id("org.springframework.boot")
     id("io.spring.dependency-management")
     id("idea")
+    application
 }
 
 group = "com.motycka.edu"
 version = "1.0.0"
+
+application {
+    mainClass.set("com.motycka.edu.GameApplicationKt")
+}
 
 java {
     sourceCompatibility = JavaVersion.VERSION_23
