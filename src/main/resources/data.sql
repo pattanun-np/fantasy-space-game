@@ -50,33 +50,4 @@ VALUES ((SELECT id FROM character WHERE name = 'Luke Skywalker'), 0, 0, 0),
 
 
 
--- Match
-INSERT INTO match (challenger_id, opponent_id, match_outcome, challenger_xp, opponent_xp)
-VALUES ((SELECT id FROM character WHERE name = 'Luke Skywalker'),
-        (SELECT id FROM character WHERE name = 'Darth Vader'),
-        'CHALLENGER_WON', 100, 50),
-       ((SELECT id FROM character WHERE name = 'Yoda'),
-        (SELECT id FROM character WHERE name = 'Emperor Palpatine'),
-        'CHALLENGER_WON', 120, 40),
-       ((SELECT id FROM character WHERE name = 'Han Solo'),
-        (SELECT id FROM character WHERE name = 'Darth Maul'),
-        'OPPONENT_WON', 60, 110),
-       ((SELECT id FROM character WHERE name = 'Obi-Wan Kenobi'),
-        (SELECT id FROM character WHERE name = 'Kylo Ren'),
-        'CHALLENGER_WON', 90, 70);
-
-
--- Round
-INSERT INTO round (match_id, round_number, character_id, health_delta, stamina_delta, mana_delta)
-VALUES ((SELECT id FROM match WHERE challenger_id = (SELECT id FROM character WHERE name = 'Luke Skywalker') AND opponent_id = (SELECT id FROM character WHERE name = 'Darth Vader')),
-        1,
-        (SELECT id FROM character WHERE name = 'Luke Skywalker'),
-        10,
-        0,
-        0);
-
-
-
-
-
 
