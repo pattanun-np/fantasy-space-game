@@ -146,40 +146,24 @@ class MatchService(
             // Skip round if both characters are defeated
             if (challengerHealth <= 0 && opponentHealth <= 0) break
             
-            val activeData = if (challengerTurn) {
-                ActiveCharacterData(
+            // Process challenger's action
+            if (challengerHealth > 0) {
+                val challengerData = ActiveCharacterData(
                     activeCharacter = challenger,
                     targetCharacter = opponent,
                     activeHealth = challengerHealth,
                     activeStamina = challengerStamina,
                     activeMana = challengerMana
                 )
-            } else {
-                ActiveCharacterData(
-                    activeCharacter = opponent,
-                    targetCharacter = challenger,
-                    activeHealth = opponentHealth,
-                    activeStamina = opponentStamina,
-                    activeMana = opponentMana
+                
+                val (healthDelta, staminaDelta, manaDelta, flight) = calculateTurnAction(
+                    challengerData.activeCharacter.characterClass,
+                    challengerData.activeStamina,
+                    challengerData.activeMana,
+                    roundNum
                 )
-            }
-            
-            // Skip turn if character is defeated
-            if (activeData.activeHealth <= 0) {
-                challengerTurn = !challengerTurn
-                continue
-            }
-            
-            // Calculate turn deltas and flight
-            val (healthDelta, staminaDelta, manaDelta, flight) = calculateTurnAction(
-                activeData.activeCharacter.characterClass,
-                activeData.activeStamina,
-                activeData.activeMana,
-                roundNum
-            )
-            
-            // Apply deltas
-            if (challengerTurn) {
+                
+                // Apply deltas
                 opponentHealth += healthDelta
                 challengerStamina += staminaDelta
                 challengerMana += manaDelta
@@ -192,7 +176,26 @@ class MatchService(
                     manaDelta = manaDelta,
                     flight = flight
                 ))
-            } else {
+            }
+            
+            // Process opponent's action in the same round
+            if (opponentHealth > 0) {
+                val opponentData = ActiveCharacterData(
+                    activeCharacter = opponent,
+                    targetCharacter = challenger,
+                    activeHealth = opponentHealth,
+                    activeStamina = opponentStamina,
+                    activeMana = opponentMana
+                )
+                
+                val (healthDelta, staminaDelta, manaDelta, flight) = calculateTurnAction(
+                    opponentData.activeCharacter.characterClass,
+                    opponentData.activeStamina,
+                    opponentData.activeMana,
+                    roundNum
+                )
+                
+                // Apply deltas
                 challengerHealth += healthDelta
                 opponentStamina += staminaDelta
                 opponentMana += manaDelta
@@ -206,9 +209,6 @@ class MatchService(
                     flight = flight
                 ))
             }
-            
-            // Switch turns
-            challengerTurn = !challengerTurn
         }
         
         return rounds
@@ -251,7 +251,10 @@ class MatchService(
         val flightType = determineFlightType(characterClass, stamina, mana, roundNumber)
         
         // Calculate flight parameters
-        val (distance, duration, success) = calculateFlightParameters(flightType, stamina, mana)
+        val flightParams = calculateFlightParameters(flightType, stamina, mana)
+        val distance = flightParams.first
+        val duration = flightParams.second
+        val success = flightParams.third
         
         // Create flight object
         val flight = Flight(
@@ -262,7 +265,9 @@ class MatchService(
         )
         
         // Calculate deltas based on flight
-        val (healthDelta, staminaDelta, manaDelta) = calculateDeltasFromFlight(flight, characterClass)
+        val healthDelta = calculateHealthDelta(flight, characterClass)
+        val staminaDelta = calculateStaminaDelta(flight, characterClass)
+        val manaDelta = calculateManaDelta(flight, characterClass)
         
         return Tuple4(healthDelta, staminaDelta, manaDelta, flight)
     }
@@ -273,18 +278,20 @@ class MatchService(
         mana: Int,
         roundNumber: Int
     ): FlightType {
-        // Different flight strategies based on character class and round number
+        // Enhanced flight strategy selection based on character class, resources, and round number
         return when {
-            // Warriors prefer attack flights early, defensive flights when low on stamina
-            characterClass == "WARRIOR" && stamina >= 15 -> FlightType.ATTACK_FLIGHT
+            // Warriors prefer different flight types based on stamina and round
+            characterClass == "WARRIOR" && stamina >= 20 && roundNumber <= 2 -> FlightType.ATTACK_FLIGHT
+            characterClass == "WARRIOR" && stamina >= 15 && roundNumber > 2 -> FlightType.POWER_FLIGHT
             characterClass == "WARRIOR" && stamina < 15 -> FlightType.DEFENSIVE_FLIGHT
             
-            // Sorcerers prefer power flights when they have mana, healing flights when needed
-            characterClass == "SORCERER" && mana >= 20 -> FlightType.POWER_FLIGHT
-            characterClass == "SORCERER" && mana < 20 -> FlightType.HEALING_FLIGHT
+            // Sorcerers prefer different flight types based on mana and round
+            characterClass == "SORCERER" && mana >= 25 && roundNumber <= 2 -> FlightType.POWER_FLIGHT
+            characterClass == "SORCERER" && mana >= 15 && roundNumber > 2 -> FlightType.ATTACK_FLIGHT
+            characterClass == "SORCERER" && mana < 15 -> FlightType.HEALING_FLIGHT
             
-            // Both classes might use evasive flights in later rounds
-            roundNumber > 3 && Random.nextInt(10) > 7 -> FlightType.EVASIVE_FLIGHT
+            // Both classes might use evasive flights in critical situations
+            roundNumber > 3 && (stamina < 10 || mana < 10) -> FlightType.EVASIVE_FLIGHT
             
             // Default flights based on class
             characterClass == "WARRIOR" -> FlightType.ATTACK_FLIGHT
@@ -297,72 +304,93 @@ class MatchService(
         stamina: Int,
         mana: Int
     ): Triple<Int, Int, Boolean> {
-        // Calculate distance based on flight type
+        // Enhanced distance calculation based on flight type and resources
         val baseDistance = when (flightType) {
-            FlightType.ATTACK_FLIGHT -> 30 + Random.nextInt(20)
-            FlightType.DEFENSIVE_FLIGHT -> 15 + Random.nextInt(15)
-            FlightType.EVASIVE_FLIGHT -> 40 + Random.nextInt(30)
-            FlightType.HEALING_FLIGHT -> 10 + Random.nextInt(10)
-            FlightType.POWER_FLIGHT -> 25 + Random.nextInt(25)
+            FlightType.ATTACK_FLIGHT -> 30 + (stamina / 3)
+            FlightType.DEFENSIVE_FLIGHT -> 15 + (stamina / 4)
+            FlightType.EVASIVE_FLIGHT -> 40 + (stamina / 2)
+            FlightType.HEALING_FLIGHT -> 10 + (mana / 5)
+            FlightType.POWER_FLIGHT -> 25 + (mana / 3)
         }
         
-        // Calculate duration based on flight type
+        // Enhanced duration calculation based on flight type and resources
         val baseDuration = when (flightType) {
-            FlightType.ATTACK_FLIGHT -> 3 + Random.nextInt(2)
-            FlightType.DEFENSIVE_FLIGHT -> 5 + Random.nextInt(3)
-            FlightType.EVASIVE_FLIGHT -> 2 + Random.nextInt(2)
-            FlightType.HEALING_FLIGHT -> 6 + Random.nextInt(4)
-            FlightType.POWER_FLIGHT -> 4 + Random.nextInt(3)
+            FlightType.ATTACK_FLIGHT -> 3 + (stamina / 20)
+            FlightType.DEFENSIVE_FLIGHT -> 5 + (stamina / 15)
+            FlightType.EVASIVE_FLIGHT -> 2 + (stamina / 25)
+            FlightType.HEALING_FLIGHT -> 6 + (mana / 10)
+            FlightType.POWER_FLIGHT -> 4 + (mana / 15)
         }
         
-        // Calculate success chance based on resources and flight type
+        // Enhanced success chance calculation based on resources and flight type
         val successChance = when (flightType) {
             FlightType.ATTACK_FLIGHT -> 0.7 + (stamina / 100.0)
             FlightType.DEFENSIVE_FLIGHT -> 0.8 + (stamina / 150.0)
             FlightType.EVASIVE_FLIGHT -> 0.6 + (stamina / 80.0)
             FlightType.HEALING_FLIGHT -> 0.75 + (mana / 100.0)
             FlightType.POWER_FLIGHT -> 0.65 + (mana / 80.0)
-        }.coerceIn(0.0, 1.0)
+        }.coerceIn(0.1, 0.95)  // Ensure some chance of failure but also some chance of success
         
         val success = Random.nextDouble() < successChance
         
         return Triple(baseDistance, baseDuration, success)
     }
     
-    private fun calculateDeltasFromFlight(
-        flight: Flight,
-        characterClass: String
-    ): Triple<Int, Int, Int> {
+    private fun calculateHealthDelta(flight: Flight, characterClass: String): Int {
         // Base damage/healing values
         val baseDamage = when (flight.flightType) {
             FlightType.ATTACK_FLIGHT -> -Random.nextInt(15, 26)
             FlightType.POWER_FLIGHT -> -Random.nextInt(20, 31)
             FlightType.DEFENSIVE_FLIGHT -> -Random.nextInt(5, 16)
             FlightType.EVASIVE_FLIGHT -> -Random.nextInt(3, 11)
-            FlightType.HEALING_FLIGHT -> -Random.nextInt(5, 11)
+            FlightType.HEALING_FLIGHT -> Random.nextInt(10, 21)  // Healing is positive
         }
         
         // Adjust damage based on success and distance
-        val adjustedDamage = if (flight.success) {
+        return if (flight.success) {
             // Successful flights do full damage, with bonus for longer distances
-            (baseDamage * (1.0 + flight.distance / 100.0)).toInt()
+            val distanceBonus = 1.0 + (flight.distance / 100.0)
+            (baseDamage * distanceBonus).toInt()
         } else {
-            // Failed flights do reduced damage
-            (baseDamage * 0.3).toInt()
+            // Failed flights do reduced damage or might even backfire
+            if (Random.nextInt(10) < 3) {
+                // Critical failure - damage is reversed (attacker hurts themselves or healing fails)
+                -baseDamage / 2
+            } else {
+                // Regular failure - reduced effect
+                (baseDamage * 0.3).toInt()
+            }
         }
-        
-        // Resource costs based on flight type and character class
-        val (staminaDelta, manaDelta) = when {
-            characterClass == "WARRIOR" && flight.flightType == FlightType.ATTACK_FLIGHT -> Pair(-10, 0)
-            characterClass == "WARRIOR" && flight.flightType == FlightType.DEFENSIVE_FLIGHT -> Pair(5, 0)
-            characterClass == "WARRIOR" && flight.flightType == FlightType.EVASIVE_FLIGHT -> Pair(-15, 0)
-            characterClass == "SORCERER" && flight.flightType == FlightType.POWER_FLIGHT -> Pair(0, -15)
-            characterClass == "SORCERER" && flight.flightType == FlightType.HEALING_FLIGHT -> Pair(0, 10)
-            characterClass == "SORCERER" && flight.flightType == FlightType.EVASIVE_FLIGHT -> Pair(0, -20)
-            else -> Pair(-5, -5) // Default resource cost
+    }
+
+    private fun calculateStaminaDelta(flight: Flight, characterClass: String): Int {
+        return when {
+            characterClass == "WARRIOR" && flight.flightType == FlightType.ATTACK_FLIGHT -> 
+                -10 - (flight.duration * 2)
+            characterClass == "WARRIOR" && flight.flightType == FlightType.DEFENSIVE_FLIGHT -> 
+                -5 - flight.duration
+            characterClass == "WARRIOR" && flight.flightType == FlightType.EVASIVE_FLIGHT -> 
+                -15 - (flight.duration * 3)
+            characterClass == "WARRIOR" && flight.flightType == FlightType.POWER_FLIGHT -> 
+                -12 - (flight.duration * 2)
+            characterClass == "SORCERER" -> 0  // Sorcerers don't use stamina
+            else -> -5  // Default stamina cost
         }
-        
-        return Triple(adjustedDamage, staminaDelta, manaDelta)
+    }
+
+    private fun calculateManaDelta(flight: Flight, characterClass: String): Int {
+        return when {
+            characterClass == "WARRIOR" -> 0  // Warriors don't use mana
+            characterClass == "SORCERER" && flight.flightType == FlightType.POWER_FLIGHT -> 
+                -15 - (flight.duration * 2)
+            characterClass == "SORCERER" && flight.flightType == FlightType.HEALING_FLIGHT -> 
+                -10 - flight.duration
+            characterClass == "SORCERER" && flight.flightType == FlightType.EVASIVE_FLIGHT -> 
+                -20 - (flight.duration * 2)
+            characterClass == "SORCERER" && flight.flightType == FlightType.ATTACK_FLIGHT -> 
+                -12 - (flight.duration * 2)
+            else -> -5  // Default mana cost
+        }
     }
 
     private fun calculateExperience(challengerWon: Boolean, challengerLevel: Int, opponentLevel: Int): Pair<Int, Int> {
