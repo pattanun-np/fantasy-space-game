@@ -1,40 +1,78 @@
-package com.motycka.edu.game.account
+package com.motycka.edu.game.characters
 
-import com.motycka.edu.game.account.rest.AccountRegistrationRequest
-import com.motycka.edu.game.account.rest.AccountResponse
-import com.motycka.edu.game.account.rest.toAccount
-import com.motycka.edu.game.account.rest.toAccountResponse
+import com.motycka.edu.game.characters.model.CharacterClass
+import com.motycka.edu.game.characters.rest.CharacterRegistrationRequest
+import com.motycka.edu.game.characters.rest.CharacterResponse
+import com.motycka.edu.game.characters.rest.toCharacter
+import com.motycka.edu.game.characters.rest.toCharacterResponse
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
-import org.springframework.web.bind.annotation.GetMapping
-import org.springframework.web.bind.annotation.PathVariable
-import org.springframework.web.bind.annotation.PostMapping
-import org.springframework.web.bind.annotation.RequestBody
-import org.springframework.web.bind.annotation.RequestMapping
-import org.springframework.web.bind.annotation.RestController
+import org.springframework.web.bind.annotation.*
 
 /**
- * This is example of a controller class that handles HTTP requests for the account resource with service dependency injection.
+ * Controller handling character-related operations through HTTP endpoints.
  */
 @RestController
-@RequestMapping("/api/accounts")
-class AccountController(
-    private val accountService: AccountService
+@RequestMapping("/api/characters")
+class CharacterController(
+    private val characterService: InterfaceCharacterService
 ) {
 
     @GetMapping
-    fun getAccount(): AccountResponse {
-        return accountService.getAccount().toAccountResponse()
+    fun getCharacters(
+        @RequestParam("class", required = false) characterClass: String?,
+        @RequestParam("name", required = false) name: String?
+    ): List<CharacterResponse> {
+        return characterService.getCharacters(
+            characterClass = parseCharacterClass(characterClass)?.name,
+            name = name
+        ).map { it.toCharacterResponse()!! }
+    }
+
+    @GetMapping("/challengers")
+    fun getChallengers(
+        @RequestParam("class", required = false) characterClass: String?,
+        @RequestParam("name", required = false) name: String?
+    ): List<CharacterResponse>? {
+        return name?.let { it ->
+            characterService.getChallenger(
+                characterClass = parseCharacterClass(characterClass)?.name,
+                it
+            ).map { it.toCharacterResponse()!! }
+        }
+    }
+
+    @GetMapping("/opponents")
+    fun getOpponents(
+        @RequestParam("class", required = false) characterClass: String?,
+        @RequestParam("name", required = false) name: String?
+    ): List<CharacterResponse>? {
+        return name?.let {
+            characterService.getOpponents(
+                characterClass = parseCharacterClass(characterClass)?.name,
+                it
+            ).map { it.toCharacterResponse()!! }
+        }
     }
 
     @PostMapping
-    fun postAccount(
-        @RequestBody account: AccountRegistrationRequest
-    ): ResponseEntity<AccountResponse?> {
-        val response = accountService.createAccount(
-            account = account.toAccount()
-        ).toAccountResponse()
-        return ResponseEntity.status(HttpStatus.CREATED).body(response)
+    fun createCharacter(
+        @RequestBody characterRequest: CharacterRegistrationRequest
+    ): ResponseEntity<CharacterResponse> {
+        val createdCharacter = characterService.createCharacter(characterRequest.toCharacter())
+        return ResponseEntity.status(HttpStatus.CREATED).body(createdCharacter.toCharacterResponse()!!)
     }
 
+    /**
+     * Helper method to safely parse character class from string
+     */
+    private fun parseCharacterClass(characterClass: String?): CharacterClass? {
+        return characterClass?.let {
+            try {
+                CharacterClass.valueOf(it)
+            } catch (e: IllegalArgumentException) {
+                null
+            }
+        }
+    }
 }

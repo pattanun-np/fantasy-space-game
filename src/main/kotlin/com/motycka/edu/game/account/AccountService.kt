@@ -13,19 +13,27 @@ private val logger = KotlinLogging.logger {}
 /**
  * This is example of service implementation with repository dependency injection.
  */
+
+interface InterfaceAccountService {
+    fun getAccount(): Account
+    fun getCurrentAccountId(): AccountId
+    fun getByUsername(username: String): Account?
+    fun createAccount(account: Account): Account
+}
+
 @Service
 class AccountService(
     private val accountRepository: AccountRepository,
-) {
+) : InterfaceAccountService {
 
-    fun getAccount(): Account {
+    override fun getAccount(): Account {
         logger.debug { "Getting current user" }
         val currentUserId = getCurrentAccountId()
         return accountRepository.selectById(id = getCurrentAccountId())
             ?: throw UsernameNotFoundException(currentUserId.toString())
     }
 
-    fun getCurrentAccountId(): AccountId {
+    override fun getCurrentAccountId(): AccountId {
         val authentication = SecurityContextHolder.getContext().authentication
         val principal = authentication.principal
         return if (principal is UserDetails) {
@@ -35,12 +43,12 @@ class AccountService(
         }
     }
 
-    fun getByUsername(username: String): Account? {
+    override fun getByUsername(username: String): Account? {
         logger.debug { "Getting user $username" }
         return accountRepository.selectByUsername(username = username)
     }
 
-    fun createAccount(account: Account): Account {
+    override fun createAccount(account: Account): Account {
         logger.debug { "Creating new user: $account" }
         return accountRepository.insertAccount(account = account) ?: error(CREATE_ERROR)
     }
