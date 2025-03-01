@@ -2,10 +2,14 @@ package com.motycka.edu.game.characters
 
 import com.motycka.edu.game.account.model.AccountId
 import com.motycka.edu.game.characters.model.Character
+import com.motycka.edu.game.characters.model.CharacterLevel
+import com.motycka.edu.game.characters.model.CharacterLevel.*
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.stereotype.Repository
 import java.sql.ResultSet
 import java.sql.SQLException
+import com.motycka.edu.game.characters.model.Warrior
+import com.motycka.edu.game.characters.model.Sorcerer
 
 @Repository
 class CharacterRepository(
@@ -126,19 +130,67 @@ class CharacterRepository(
 
     @Throws(SQLException::class)
     private fun rowMapper(rs: ResultSet, i: Int): Character {
-        return Character(
-            rs.getLong("id"),
-            rs.getLong("account_id"),
-            rs.getString("name"),
-            rs.getInt("health"),
-            rs.getInt("attack"),
-            rs.getInt("stamina"),
-            rs.getInt("defense"),
-            rs.getInt("mana"),
-            rs.getInt("healing"),
-            rs.getString("class"),
-            rs.getInt("experience"),
-            rs.getInt("level")
-        )
+        val id = rs.getLong("id")
+        val accountId = rs.getLong("account_id")
+        val name = rs.getString("name")
+        val health = rs.getInt("health")
+        val attack = rs.getInt("attack")
+        val stamina = rs.getInt("stamina")
+        val defense = rs.getInt("defense")
+        val mana = rs.getInt("mana")
+        val healing = rs.getInt("healing")
+        val characterClass = rs.getString("class")
+        val experience = rs.getInt("experience")
+        val level = rs.getInt("level")
+
+
+
+        if (characterClass == "WARRIOR") {
+            return Warrior(
+                id = id,
+                accountId = accountId,
+                name = name,
+                health = health,
+                attackPower = attack,
+                stamina = stamina,
+                defensePower = defense,
+                level = toCharacterLevel(level),
+                experience = experience,
+            )
+        } else if (characterClass == "SORCERER") {
+            return Sorcerer(
+                id = id,
+                accountId = accountId,
+                name = name,
+                health = health,
+                attackPower = attack,
+                mana = mana,
+                healingPower = healing,
+                level = toCharacterLevel(level),
+                experience = experience,
+                defensePower = defense
+            )
+        }
+
+        throw IllegalArgumentException("Invalid character class")
+
     }
+
+    fun toCharacterLevel(level: Int): CharacterLevel {
+        return when (level) {
+            1 -> LEVEL_1
+            2 -> LEVEL_2
+            3 -> LEVEL_3
+            4 -> LEVEL_4
+            5 -> LEVEL_5
+            6 -> LEVEL_6
+            7 -> LEVEL_7
+            8 -> LEVEL_8
+            9 -> LEVEL_9
+            10 -> LEVEL_10
+            else -> LEVEL_1
+        }
+    }
+
+
 }

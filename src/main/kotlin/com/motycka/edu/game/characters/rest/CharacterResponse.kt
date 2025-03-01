@@ -1,9 +1,7 @@
 package com.motycka.edu.game.characters.rest
 
-import com.motycka.edu.game.characters.model.CharacterId
-
 data class CharacterResponse(
-    val id: CharacterId,
+    val id: String,
     val name: String,
     val health: Int,
     val attack: Int,

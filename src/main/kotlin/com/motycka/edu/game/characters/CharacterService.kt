@@ -24,7 +24,7 @@ interface InterfaceCharacterService {
 
     fun getCharacterById(id: Long): Character
     fun createCharacter(character: Character): Character
-    fun updateCharacter(id: Long, character: Character): Character
+
 }
 
 @Service
@@ -68,40 +68,7 @@ class CharacterService(
             ?: throw IllegalStateException(CREATE_ERROR)
     }
 
-    override fun updateCharacter(id: Long, character: Character): Character {
-        logger.debug { "Updating character with ID: $id" }
-        
-        // Get the existing character to verify ownership and class
-        val existingCharacter = getCharacterById(id)
-        
-        // Verify ownership
-        val currentAccountId = accountService.getCurrentAccountId()
-        if (existingCharacter.accountId != currentAccountId) {
-            throw IllegalStateException("Cannot update character: not the owner")
-        }
-
-        // Verify character class hasn't changed
-        if (existingCharacter.characterClass != character.characterClass) {
-            throw IllegalStateException("Cannot change character class during update")
-        }
-
-        // Validate point distribution based on character class
-        validatePointDistribution(character)
-
-        // Validate class-specific attributes
-        validateClassSpecificAttributes(character)
-
-        // Update the character with new stats while preserving existing data
-        val updatedCharacter = character.copy(
-            id = id,
-            accountId = existingCharacter.accountId,
-            experience = existingCharacter.experience,
-            level = existingCharacter.level + 1  // Increment level
-        )
-
-        return characterRepository.updateCharacter(updatedCharacter)
-            ?: throw IllegalStateException("Character update failed")
-    }
+ 
 
     private fun validatePointDistribution(character: Character) {
         // Base stats validation
@@ -120,7 +87,7 @@ class CharacterService(
                 }
             }
             "SORCERER" -> {
-                if (character.mana == null || character.healing == null || character.mana <= 0 || character.healing <= 0) {
+                if (character.mana == null || character.healing == null || character.mana!! <= 0 || character.healing <= 0) {
                     throw IllegalArgumentException("Sorcerers must have positive mana and healing power")
                 }
                 if (character.stamina > 0 || character.defense > 0) {

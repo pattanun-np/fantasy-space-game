@@ -16,13 +16,5 @@ class MatchController(
         return matchService.getAllMatches()
     }
 
-    @PostMapping
-    fun createMatch(@RequestBody request: MatchRequest): ResponseEntity<Match> {
-        val match = matchService.createMatch(
-            challengerId = request.challengerId,
-            opponentId = request.opponentId,
-            rounds = request.rounds
-        )
-        return ResponseEntity.ok(match)
-    }
+   
 } 

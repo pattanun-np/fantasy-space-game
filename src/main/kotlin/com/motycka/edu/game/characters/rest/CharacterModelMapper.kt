@@ -1,22 +1,29 @@
 package com.motycka.edu.game.characters.rest
 
-import com.motycka.edu.game.characters.model.Character
+import com.motycka.edu.game.characters.model.*
 
+fun CharacterRegistrationRequest.toCharacter(): Character {
 
-fun CharacterRegistrationRequest.toCharacter() = Character(
-    id = null,
-    name = name,
-    health = health,
-    attack = attackPower,
-    stamina = stamina,
-    defense = defensePower,
-    characterClass = characterClass,
+    var healingPower = 0
+    return when (characterClass) {
+        CharacterClass.WARRIOR.toString() -> Warrior(
+            id = null, accountId = 0, name = name, health = health, attackPower = attackPower,
+            stamina = stamina, defensePower = defensePower, experience = 0, level = CharacterLevel.LEVEL_1
+        )
 
-)
+        CharacterClass.SORCERER.toString() -> Sorcerer(
+            id = null, accountId = 0, name = name, health = health, attackPower = attackPower,
+            mana = stamina, defensePower = defensePower, experience = 0, level = CharacterLevel.LEVEL_1,
+            healingPower = healingPower
+        )
+
+        else -> error("Unsupported character class: $characterClass")
+    }
+}
 
 fun Character.toCharacterResponse() = experience?.let {
     CharacterResponse(
-        id = requireNotNull(id) { "Character id must not be null" },
+        id = id,
         name = name,
         health = health,
         attack = attack,

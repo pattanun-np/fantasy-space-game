@@ -3,7 +3,6 @@ package com.motycka.edu.game.characters
 import com.motycka.edu.game.characters.model.CharacterClass
 import com.motycka.edu.game.characters.rest.CharacterRegistrationRequest
 import com.motycka.edu.game.characters.rest.CharacterResponse
-import com.motycka.edu.game.characters.rest.CharacterUpdateRequest
 import com.motycka.edu.game.characters.rest.toCharacter
 import com.motycka.edu.game.characters.rest.toCharacterResponse
 import org.springframework.http.HttpStatus
@@ -62,14 +61,7 @@ class CharacterController(
         return ResponseEntity.status(HttpStatus.CREATED).body(createdCharacter.toCharacterResponse()!!)
     }
 
-    @PutMapping("/{id}")
-    fun updateCharacter(
-        @PathVariable id: Long,
-        @RequestBody updateRequest: CharacterUpdateRequest
-    ): ResponseEntity<CharacterResponse> {
-        val updatedCharacter = characterService.updateCharacter(id, updateRequest.toCharacter())
-        return ResponseEntity.ok(updatedCharacter.toCharacterResponse()!!)
-    }
+   
 
     /**
      * Helper method to safely parse character class from string
