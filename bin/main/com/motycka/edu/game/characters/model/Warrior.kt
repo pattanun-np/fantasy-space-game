@@ -28,13 +28,7 @@ class Warrior(
 
     private val logger = KotlinLogging.logger {}
 
-    init {
-        logger.info { "Warrior $name has been created" }
-        val totalPoints = attack + stamina + defense
-        require(totalPoints <= level.points) {
-            "Total points $totalPoints exceeds level ${level.points}"
-        }
-    }
+
 
     override fun attack(target: Character) {
         if (!isAlive()) {

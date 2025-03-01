@@ -9,6 +9,7 @@ import com.motycka.edu.game.matches.rest.MatchRequest
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.springframework.stereotype.Service
 import kotlin.random.Random
+import com.motycka.edu.game.characters.model.CharacterClass
 
 private val logger = KotlinLogging.logger {}
 
@@ -16,7 +17,7 @@ interface InterfaceMatchService {
     fun getAllMatches(): List<Match>
     fun getMatchById(id: Long): Match?
     fun createMatch(matchRequest: MatchRequest): Match
-    fun processMatch(matchId: Long): Match
+    fun processMatch(matchId: Long, numRounds: Int = 5): Match
 }
 
 @Service
@@ -71,21 +72,36 @@ class MatchService(
         )
         
         val savedMatch = matchRepository.saveMatch(match)
-        return processMatch(savedMatch.id!!)
+        
+        // Use the rounds from the matchRequest, defaulting to 5 if not specified
+        val numRounds = matchRequest.rounds ?: 5
+        
+        return processMatch(savedMatch.id!!, numRounds)
     }
     
-    override fun processMatch(matchId: Long): Match {
+    override fun processMatch(matchId: Long, numRounds: Int): Match {
         val match = matchRepository.getMatchById(matchId) ?: throw IllegalArgumentException("Match not found")
         
         val challenger = characterService.getCharacterById(match.challenger.id)
         val opponent = characterService.getCharacterById(match.opponent.id)
         
-        // Process rounds
-        val rounds = processRounds(match.id!!, challenger, opponent, 5) // Default to 5 rounds
+        // Process rounds with the specified number
+        val rounds = processRounds(match.id!!, challenger, opponent, numRounds)
         
         // Determine winner
         val (challengerFinalHealth, opponentFinalHealth) = calculateFinalHealth(challenger, opponent, rounds)
-        val challengerWon = challengerFinalHealth > 0 && (opponentFinalHealth <= 0 || challengerFinalHealth > opponentFinalHealth)
+        
+        // Determine match outcome
+        val matchOutcome = when {
+            challengerFinalHealth <= 0 && opponentFinalHealth <= 0 -> MatchOutcome.DRAW
+            challengerFinalHealth <= 0 -> MatchOutcome.OPPONENT_WON
+            opponentFinalHealth <= 0 -> MatchOutcome.CHALLENGER_WON
+            challengerFinalHealth > opponentFinalHealth -> MatchOutcome.CHALLENGER_WON
+            opponentFinalHealth > challengerFinalHealth -> MatchOutcome.OPPONENT_WON
+            else -> MatchOutcome.DRAW
+        }
+        
+        val challengerWon = matchOutcome == MatchOutcome.CHALLENGER_WON
         
         // Calculate experience
         val (challengerExp, opponentExp) = calculateExperience(
@@ -104,7 +120,8 @@ class MatchService(
                 experienceGained = opponentExp,
                 isVictor = !challengerWon
             ),
-            rounds = rounds
+            rounds = rounds,
+            matchOutcome = matchOutcome
         )
         
         // Update leaderboard
@@ -144,70 +161,104 @@ class MatchService(
         
         for (roundNum in 1..numRounds) {
             // Skip round if both characters are defeated
-            if (challengerHealth <= 0 && opponentHealth <= 0) break
+            if (challengerHealth <= 0 && opponentHealth <= 0) {
+                logger.info { "Both characters defeated, ending match at round $roundNum" }
+                break
+            }
             
-            // Process challenger's action
-            if (challengerHealth > 0) {
-                val challengerData = ActiveCharacterData(
-                    activeCharacter = challenger,
-                    targetCharacter = opponent,
-                    activeHealth = challengerHealth,
-                    activeStamina = challengerStamina,
-                    activeMana = challengerMana
-                )
-                
-                val (healthDelta, staminaDelta, manaDelta, flight) = calculateTurnAction(
-                    challengerData.activeCharacter.characterClass,
-                    challengerData.activeStamina,
-                    challengerData.activeMana,
-                    roundNum
-                )
-                
-                // Apply deltas
-                opponentHealth += healthDelta
-                challengerStamina += staminaDelta
-                challengerMana += manaDelta
+            // If it's the challenger's turn but they're defeated, skip their turn
+            if (challengerTurn && challengerHealth <= 0) {
+                logger.info { "Challenger defeated, skipping their turn in round $roundNum" }
+                challengerTurn = !challengerTurn
+                continue
+            }
+            
+            // If it's the opponent's turn but they're defeated, skip their turn
+            if (!challengerTurn && opponentHealth <= 0) {
+                logger.info { "Opponent defeated, skipping their turn in round $roundNum" }
+                challengerTurn = !challengerTurn
+                continue
+            }
+            
+            // If both characters have skipped their turns, end the match
+            if ((challengerHealth <= 0 && opponentHealth <= 0) ||
+                (roundNum > 23 && (challengerHealth <= 0 || opponentHealth <= 0))) {
+                logger.info { "Match ended at round $roundNum due to character defeat" }
+                break
+            }
+            
+            // Get active character info
+            val activeCharacter = if (challengerTurn) challenger else opponent
+            val activeStamina = if (challengerTurn) challengerStamina else opponentStamina
+            val activeMana = if (challengerTurn) challengerMana else opponentMana
+            
+            // Calculate turn deltas and flight
+            val turnResult = calculateTurnAction(
+                activeCharacter.characterClass,
+                activeStamina,
+                activeMana,
+                roundNum
+            )
+            
+            // Apply deltas
+            if (challengerTurn) {
+                // Only apply damage if the opponent is still alive
+                if (opponentHealth > 0) {
+                    opponentHealth += turnResult.healthDelta
+                }
+                challengerStamina += turnResult.staminaDelta
+                challengerMana += turnResult.manaDelta
                 
                 rounds.add(MatchRound(
                     round = roundNum,
                     characterId = challenger.id.toLong(),
-                    healthDelta = healthDelta,
-                    staminaDelta = staminaDelta,
-                    manaDelta = manaDelta,
-                    flight = flight
+                    healthDelta = turnResult.healthDelta,
+                    staminaDelta = turnResult.staminaDelta,
+                    manaDelta = turnResult.manaDelta,
+                    flight = turnResult.flight
                 ))
-            }
-            
-            // Process opponent's action in the same round
-            if (opponentHealth > 0) {
-                val opponentData = ActiveCharacterData(
-                    activeCharacter = opponent,
-                    targetCharacter = challenger,
-                    activeHealth = opponentHealth,
-                    activeStamina = opponentStamina,
-                    activeMana = opponentMana
-                )
-                
-                val (healthDelta, staminaDelta, manaDelta, flight) = calculateTurnAction(
-                    opponentData.activeCharacter.characterClass,
-                    opponentData.activeStamina,
-                    opponentData.activeMana,
-                    roundNum
-                )
-                
-                // Apply deltas
-                challengerHealth += healthDelta
-                opponentStamina += staminaDelta
-                opponentMana += manaDelta
+            } else {
+                // Only apply damage if the challenger is still alive
+                if (challengerHealth > 0) {
+                    challengerHealth += turnResult.healthDelta
+                }
+                opponentStamina += turnResult.staminaDelta
+                opponentMana += turnResult.manaDelta
                 
                 rounds.add(MatchRound(
                     round = roundNum,
                     characterId = opponent.id.toLong(),
-                    healthDelta = healthDelta,
-                    staminaDelta = staminaDelta,
-                    manaDelta = manaDelta,
-                    flight = flight
+                    healthDelta = turnResult.healthDelta,
+                    staminaDelta = turnResult.staminaDelta,
+                    manaDelta = turnResult.manaDelta,
+                    flight = turnResult.flight
                 ))
+            }
+            
+            // Switch turns
+            challengerTurn = !challengerTurn
+            
+            // Check if the match should end due to a character being defeated
+            if (challengerHealth <= 0 || opponentHealth <= 0) {
+                logger.info { "Character defeated, ending match at round $roundNum" }
+                // Add one more round to show the final state, then break
+                if (roundNum < numRounds) {
+                    rounds.add(MatchRound(
+                        round = roundNum + 1,
+                        characterId = if (challengerHealth <= 0) opponent.id.toLong() else challenger.id.toLong(),
+                        healthDelta = 0,
+                        staminaDelta = 0,
+                        manaDelta = 0,
+                        flight = Flight(
+                            flightType = FlightType.POWER_FLIGHT,
+                            distance = 0,
+                            duration = 0,
+                            success = true,
+                            description = "Match ended - ${if (challengerHealth <= 0) opponent.name else challenger.name} is victorious!"
+                        )
+                    ))
+                }
+                break
             }
         }
         
@@ -241,158 +292,78 @@ class MatchService(
         return Pair(challengerHealth, opponentHealth)
     }
 
+    // Replace the Triple with a data class to hold the turn results
+    private data class TurnResult(
+        val healthDelta: Int,
+        val staminaDelta: Int,
+        val manaDelta: Int,
+        val flight: Flight?
+    )
+
     private fun calculateTurnAction(
         characterClass: String,
         stamina: Int,
         mana: Int,
-        roundNumber: Int
-    ): Tuple4<Int, Int, Int, Flight> {
-        // Determine flight type based on character class, resources, and round number
-        val flightType = determineFlightType(characterClass, stamina, mana, roundNumber)
+        roundNum: Int
+    ): TurnResult {
+        val random = Random.nextInt(100)
         
-        // Calculate flight parameters
-        val flightParams = calculateFlightParameters(flightType, stamina, mana)
-        val distance = flightParams.first
-        val duration = flightParams.second
-        val success = flightParams.third
-        
-        // Create flight object
-        val flight = Flight(
-            flightType = flightType,
-            distance = distance,
-            duration = duration,
-            success = success
-        )
+        // Generate a flight based on character class and random chance
+        val flight = when {
+            random < 20 -> {
+                val flightType = when (characterClass) {
+                    "WARRIOR" -> FlightType.ATTACK_FLIGHT
+                    "MAGE" -> FlightType.POWER_FLIGHT
+                    "ROGUE" -> FlightType.EVASIVE_FLIGHT
+                    "HEALER" -> FlightType.HEALING_FLIGHT
+                    else -> FlightType.ATTACK_FLIGHT // Default case
+                }
+                
+                Flight(
+                    flightType = flightType,
+                    distance = Random.nextInt(10, 100),
+                    duration = Random.nextInt(1, 10),
+                    success = Random.nextBoolean(),
+                    description = "Performed a ${flightType.getDisplayName()} flight"
+                )
+            }
+            else -> null
+        }
         
         // Calculate deltas based on flight
-        val healthDelta = calculateHealthDelta(flight, characterClass)
-        val staminaDelta = calculateStaminaDelta(flight, characterClass)
-        val manaDelta = calculateManaDelta(flight, characterClass)
-        
-        return Tuple4(healthDelta, staminaDelta, manaDelta, flight)
-    }
-    
-    private fun determineFlightType(
-        characterClass: String,
-        stamina: Int,
-        mana: Int,
-        roundNumber: Int
-    ): FlightType {
-        // Enhanced flight strategy selection based on character class, resources, and round number
-        return when {
-            // Warriors prefer different flight types based on stamina and round
-            characterClass == "WARRIOR" && stamina >= 20 && roundNumber <= 2 -> FlightType.ATTACK_FLIGHT
-            characterClass == "WARRIOR" && stamina >= 15 && roundNumber > 2 -> FlightType.POWER_FLIGHT
-            characterClass == "WARRIOR" && stamina < 15 -> FlightType.DEFENSIVE_FLIGHT
-            
-            // Sorcerers prefer different flight types based on mana and round
-            characterClass == "SORCERER" && mana >= 25 && roundNumber <= 2 -> FlightType.POWER_FLIGHT
-            characterClass == "SORCERER" && mana >= 15 && roundNumber > 2 -> FlightType.ATTACK_FLIGHT
-            characterClass == "SORCERER" && mana < 15 -> FlightType.HEALING_FLIGHT
-            
-            // Both classes might use evasive flights in critical situations
-            roundNumber > 3 && (stamina < 10 || mana < 10) -> FlightType.EVASIVE_FLIGHT
-            
-            // Default flights based on class
-            characterClass == "WARRIOR" -> FlightType.ATTACK_FLIGHT
-            else -> FlightType.POWER_FLIGHT
-        }
-    }
-    
-    private fun calculateFlightParameters(
-        flightType: FlightType,
-        stamina: Int,
-        mana: Int
-    ): Triple<Int, Int, Boolean> {
-        // Enhanced distance calculation based on flight type and resources
-        val baseDistance = when (flightType) {
-            FlightType.ATTACK_FLIGHT -> 30 + (stamina / 3)
-            FlightType.DEFENSIVE_FLIGHT -> 15 + (stamina / 4)
-            FlightType.EVASIVE_FLIGHT -> 40 + (stamina / 2)
-            FlightType.HEALING_FLIGHT -> 10 + (mana / 5)
-            FlightType.POWER_FLIGHT -> 25 + (mana / 3)
-        }
-        
-        // Enhanced duration calculation based on flight type and resources
-        val baseDuration = when (flightType) {
-            FlightType.ATTACK_FLIGHT -> 3 + (stamina / 20)
-            FlightType.DEFENSIVE_FLIGHT -> 5 + (stamina / 15)
-            FlightType.EVASIVE_FLIGHT -> 2 + (stamina / 25)
-            FlightType.HEALING_FLIGHT -> 6 + (mana / 10)
-            FlightType.POWER_FLIGHT -> 4 + (mana / 15)
-        }
-        
-        // Enhanced success chance calculation based on resources and flight type
-        val successChance = when (flightType) {
-            FlightType.ATTACK_FLIGHT -> 0.7 + (stamina / 100.0)
-            FlightType.DEFENSIVE_FLIGHT -> 0.8 + (stamina / 150.0)
-            FlightType.EVASIVE_FLIGHT -> 0.6 + (stamina / 80.0)
-            FlightType.HEALING_FLIGHT -> 0.75 + (mana / 100.0)
-            FlightType.POWER_FLIGHT -> 0.65 + (mana / 80.0)
-        }.coerceIn(0.1, 0.95)  // Ensure some chance of failure but also some chance of success
-        
-        val success = Random.nextDouble() < successChance
-        
-        return Triple(baseDistance, baseDuration, success)
-    }
-    
-    private fun calculateHealthDelta(flight: Flight, characterClass: String): Int {
-        // Base damage/healing values
-        val baseDamage = when (flight.flightType) {
-            FlightType.ATTACK_FLIGHT -> -Random.nextInt(15, 26)
-            FlightType.POWER_FLIGHT -> -Random.nextInt(20, 31)
-            FlightType.DEFENSIVE_FLIGHT -> -Random.nextInt(5, 16)
-            FlightType.EVASIVE_FLIGHT -> -Random.nextInt(3, 11)
-            FlightType.HEALING_FLIGHT -> Random.nextInt(10, 21)  // Healing is positive
-        }
-        
-        // Adjust damage based on success and distance
-        return if (flight.success) {
-            // Successful flights do full damage, with bonus for longer distances
-            val distanceBonus = 1.0 + (flight.distance / 100.0)
-            (baseDamage * distanceBonus).toInt()
-        } else {
-            // Failed flights do reduced damage or might even backfire
-            if (Random.nextInt(10) < 3) {
-                // Critical failure - damage is reversed (attacker hurts themselves or healing fails)
-                -baseDamage / 2
-            } else {
-                // Regular failure - reduced effect
-                (baseDamage * 0.3).toInt()
+        val healthDelta = flight?.let {
+            when (it.flightType) {
+                FlightType.ATTACK_FLIGHT -> if (it.success) -Random.nextInt(10, 30) else -Random.nextInt(1, 10)
+                FlightType.POWER_FLIGHT -> if (it.success) -Random.nextInt(15, 40) else -Random.nextInt(1, 15)
+                FlightType.EVASIVE_FLIGHT -> 0
+                FlightType.HEALING_FLIGHT -> if (it.success) Random.nextInt(10, 30) else Random.nextInt(1, 10)
+                FlightType.DEFENSIVE_FLIGHT -> 0
             }
-        }
+        } ?: -Random.nextInt(5, 15)
+        
+        val staminaDelta = flight?.let {
+            when (it.flightType) {
+                FlightType.ATTACK_FLIGHT -> -Random.nextInt(5, 10)
+                FlightType.POWER_FLIGHT -> -Random.nextInt(10, 20)
+                FlightType.EVASIVE_FLIGHT -> -Random.nextInt(3, 8)
+                FlightType.HEALING_FLIGHT -> -Random.nextInt(5, 15)
+                FlightType.DEFENSIVE_FLIGHT -> -Random.nextInt(5, 10)
+            }
+        } ?: -Random.nextInt(1, 5)
+        
+        val manaDelta = flight?.let {
+            when (it.flightType) {
+                FlightType.ATTACK_FLIGHT -> -Random.nextInt(1, 5)
+                FlightType.POWER_FLIGHT -> -Random.nextInt(10, 20)
+                FlightType.EVASIVE_FLIGHT -> -Random.nextInt(1, 3)
+                FlightType.HEALING_FLIGHT -> -Random.nextInt(5, 15)
+                FlightType.DEFENSIVE_FLIGHT -> -Random.nextInt(3, 8)
+            }
+        } ?: -Random.nextInt(1, 3)
+        
+        return TurnResult(healthDelta, staminaDelta, manaDelta, flight)
     }
-
-    private fun calculateStaminaDelta(flight: Flight, characterClass: String): Int {
-        return when {
-            characterClass == "WARRIOR" && flight.flightType == FlightType.ATTACK_FLIGHT -> 
-                -10 - (flight.duration * 2)
-            characterClass == "WARRIOR" && flight.flightType == FlightType.DEFENSIVE_FLIGHT -> 
-                -5 - flight.duration
-            characterClass == "WARRIOR" && flight.flightType == FlightType.EVASIVE_FLIGHT -> 
-                -15 - (flight.duration * 3)
-            characterClass == "WARRIOR" && flight.flightType == FlightType.POWER_FLIGHT -> 
-                -12 - (flight.duration * 2)
-            characterClass == "SORCERER" -> 0  // Sorcerers don't use stamina
-            else -> -5  // Default stamina cost
-        }
-    }
-
-    private fun calculateManaDelta(flight: Flight, characterClass: String): Int {
-        return when {
-            characterClass == "WARRIOR" -> 0  // Warriors don't use mana
-            characterClass == "SORCERER" && flight.flightType == FlightType.POWER_FLIGHT -> 
-                -15 - (flight.duration * 2)
-            characterClass == "SORCERER" && flight.flightType == FlightType.HEALING_FLIGHT -> 
-                -10 - flight.duration
-            characterClass == "SORCERER" && flight.flightType == FlightType.EVASIVE_FLIGHT -> 
-                -20 - (flight.duration * 2)
-            characterClass == "SORCERER" && flight.flightType == FlightType.ATTACK_FLIGHT -> 
-                -12 - (flight.duration * 2)
-            else -> -5  // Default mana cost
-        }
-    }
-
+    
     private fun calculateExperience(challengerWon: Boolean, challengerLevel: Int, opponentLevel: Int): Pair<Int, Int> {
         val baseExp = 100
         val levelDiff = opponentLevel - challengerLevel
@@ -414,7 +385,4 @@ class MatchService(
             )
         }
     }
-    
-    // Helper class for returning 4 values
-    private data class Tuple4<A, B, C, D>(val first: A, val second: B, val third: C, val fourth: D)
 } 

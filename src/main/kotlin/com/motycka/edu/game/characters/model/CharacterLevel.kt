@@ -1,23 +1,35 @@
 package com.motycka.edu.game.characters.model
 
 
-enum class CharacterLevel(
-    val points: Int,
-    private val requireExp: Int
-) {
-    LEVEL_1(200, 300),
-    LEVEL_2(210, 600),
-    LEVEL_3(230, 900),
-    LEVEL_4(260, 1050),
-    LEVEL_5(300, 1550),
-    LEVEL_6(350, 2100),
-    LEVEL_7(410, 2700),
-    LEVEL_8(480, 3300),
-    LEVEL_9(560, 3950),
-    LEVEL_10(650, 4650);
+enum class CharacterLevel(val level: Int, val requireExp: Int) {
+    LEVEL_1(1, 0),
+    LEVEL_2(2, 300),
+    LEVEL_3(3, 600),
+    LEVEL_4(4, 900),
+    LEVEL_5(5, 1200),
+    LEVEL_6(6, 1500),
+    LEVEL_7(7, 1800),
+    LEVEL_8(8, 2100),
+    LEVEL_9(9, 2400),
+    LEVEL_10(10, 2700);
 
-    fun shouldLevelUp(currentExp: Int): Boolean {
-        return currentExp >= requireExp
+    companion object {
+        fun fromLevel(level: Int): CharacterLevel {
+            return values().find { it.level == level } ?: LEVEL_1
+        }
+    }
+
+    // Get the next level (returns null if already at max level)
+    fun getNextLevel(): CharacterLevel? {
+        val levels = values()
+        val currentIndex = levels.indexOf(this)
+        return if (currentIndex < levels.size - 1) levels[currentIndex + 1] else null
+    }
+
+    // Check if character has enough experience to level up
+    fun shouldLevelUp(experience: Int): Boolean {
+        val nextLevel = getNextLevel() ?: return false
+        return experience >= nextLevel.requireExp
     }
 
 
@@ -46,7 +58,7 @@ enum class CharacterLevel(
             error("Require Character or List<Int>")
         }
 
-        return entries.toTypedArray().findLast { it.points <= totalPoints } ?: LEVEL_1
+        return entries.toTypedArray().findLast { it.requireExp <= totalPoints } ?: LEVEL_1
     }
 
 }

@@ -4,7 +4,8 @@ data class Match(
     val id: Long? = null,
     val challenger: MatchCharacter,
     val opponent: MatchCharacter,
-    val rounds: List<MatchRound>
+    val rounds: List<MatchRound> = emptyList(),
+    val matchOutcome: MatchOutcome = MatchOutcome.UNKNOWN
 )
 
 data class MatchCharacter(
@@ -14,7 +15,8 @@ data class MatchCharacter(
     val level: String,
     val experienceTotal: Int,
     val experienceGained: Int,
-    val isVictor: Boolean
+    val isVictor: Boolean,
+    val status: String = if (isVictor) "VICTOR" else "DEFEATED"
 )
 
 data class MatchRound(
@@ -23,7 +25,9 @@ data class MatchRound(
     val healthDelta: Int,
     val staminaDelta: Int,
     val manaDelta: Int,
-    val flight: Flight? = null
+    val flight: Flight? = null,
+    val actionType: String = flight?.flightType?.getDisplayName() ?: "Standard",
+    val actionResult: String = flight?.let { if (it.success) "SUCCESS" else "FAILED" } ?: "STANDARD"
 )
 
 data class Flight(
@@ -39,7 +43,17 @@ enum class FlightType {
     DEFENSIVE_FLIGHT,
     EVASIVE_FLIGHT,
     HEALING_FLIGHT,
-    POWER_FLIGHT
+    POWER_FLIGHT;
+    
+    fun getDisplayName(): String {
+        return when (this) {
+            ATTACK_FLIGHT -> "Attack"
+            DEFENSIVE_FLIGHT -> "Defense"
+            EVASIVE_FLIGHT -> "Evasion"
+            HEALING_FLIGHT -> "Healing"
+            POWER_FLIGHT -> "Power"
+        }
+    }
 }
 
 fun generateFlightDescription(flightType: FlightType, success: Boolean): String {
@@ -70,4 +84,11 @@ fun generateFlightDescription(flightType: FlightType, success: Boolean): String 
     }
     
     return "Character $action, $outcome"
+}
+
+enum class MatchOutcome {
+    CHALLENGER_WON,
+    OPPONENT_WON,
+    DRAW,
+    UNKNOWN
 } 
