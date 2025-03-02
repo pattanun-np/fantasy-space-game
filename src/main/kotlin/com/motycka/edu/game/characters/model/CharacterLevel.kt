@@ -27,7 +27,7 @@ enum class CharacterLevel(val level: Int, val requireExp: Int) {
     }
 
     // Check if character has enough experience to level up
-    fun shouldLevelUp(experience: Int): Boolean {
+    open fun shouldLevelUp(experience: Int): Boolean {
         val nextLevel = getNextLevel() ?: return false
         return experience >= nextLevel.requireExp
     }

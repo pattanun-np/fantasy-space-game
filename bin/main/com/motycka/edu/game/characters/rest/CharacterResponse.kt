@@ -10,7 +10,10 @@ data class CharacterResponse(
     val characterClass: String,
     val experience: Int,
     val level: String,
-    val isOwner: Boolean
+    val isOwner: Boolean,
+    val shouldLevelUp: Boolean,
+    val mana: Int?,
+    val healing: Int?
 )
 
 

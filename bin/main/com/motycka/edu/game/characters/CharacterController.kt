@@ -8,6 +8,7 @@ import com.motycka.edu.game.characters.rest.toCharacterResponse
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.*
+import com.motycka.edu.game.characters.model.CharacterLevel
 
 /**
  * Controller handling character-related operations through HTTP endpoints.
@@ -75,8 +76,6 @@ class CharacterController(
         return ResponseEntity.status(HttpStatus.CREATED).body(createdCharacter.toCharacterResponse()!!)
     }
 
-   
-
     /**
      * Helper method to safely parse character class from string
      */
@@ -89,4 +88,21 @@ class CharacterController(
             }
         }
     }
+
+    // Helper method to determine if a character should level up
+    private fun shouldCharacterLevelUp(level: Int, experience: Int): Boolean {
+        return when (level) {
+            1 -> experience >= 300
+            2 -> experience >= 600
+            3 -> experience >= 900
+            4 -> experience >= 1200
+            5 -> experience >= 1500
+            6 -> experience >= 1800
+            7 -> experience >= 2100
+            8 -> experience >= 2400
+            9 -> experience >= 2700
+            else -> false
+        }
+    }
 }
+

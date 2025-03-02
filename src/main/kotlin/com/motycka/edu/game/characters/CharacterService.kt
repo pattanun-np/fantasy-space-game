@@ -25,6 +25,7 @@ interface InterfaceCharacterService {
     fun getCharacterById(id: Long): Character
     fun createCharacter(character: Character): Character
     fun updateExperience(characterId: Long, newExperience: Int): Character
+    fun isCharacterOwner(characterId: Int): Boolean
 }
 
 @Service
@@ -156,6 +157,13 @@ class CharacterService(
      */
     private fun fetchAndMarkOwnership(characters: List<Character>, accountId: Long): List<Character> {
         return characters.map { it.apply { isOwner = it.accountId == accountId } }
+    }
+
+    override fun isCharacterOwner(characterId: Int): Boolean {
+        val character = getCharacterById(characterId.toLong())
+        val accountId = accountService.getCurrentAccountId()
+        logger.debug { "Checking if character $characterId is owned by account $accountId" }
+        return character.accountId == accountId
     }
 
     companion object {

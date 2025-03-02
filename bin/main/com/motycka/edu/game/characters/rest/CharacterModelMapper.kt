@@ -1,6 +1,10 @@
 package com.motycka.edu.game.characters.rest
 
-import com.motycka.edu.game.characters.model.*
+import com.motycka.edu.game.characters.model.Character
+import com.motycka.edu.game.characters.model.CharacterClass
+import com.motycka.edu.game.characters.model.CharacterLevel
+import com.motycka.edu.game.characters.model.Sorcerer
+import com.motycka.edu.game.characters.model.Warrior
 
 fun CharacterRegistrationRequest.toCharacter(): Character {
 
@@ -29,17 +33,12 @@ fun Character.toCharacterResponse() = experience?.let {
         attack = attack,
         stamina = stamina,
         defense = defense,
+        mana = if (this is Sorcerer) this.mana else null,
+        healing = if (this is Sorcerer) this.healing else null,
         characterClass = characterClass,
         experience = it,
         level = level.toString(),
+        shouldLevelUp = CharacterLevel.fromLevel(level).shouldLevelUp(it),
         isOwner = isOwner
-
-
-//    characterClass = when(this){
-//        is Warrior -> CharacterClass.WARRIOR
-//        is Sorcerer -> CharacterClass.SORCERER
-//        else -> error("Unknown character class")
-//    }.name,
-
     )
 }
